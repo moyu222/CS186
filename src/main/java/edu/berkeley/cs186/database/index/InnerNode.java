@@ -10,6 +10,7 @@ import edu.berkeley.cs186.database.memory.Page;
 import edu.berkeley.cs186.database.table.RecordId;
 
 import java.nio.ByteBuffer;
+import java.sql.Array;
 import java.util.*;
 
 /**
@@ -81,8 +82,14 @@ class InnerNode extends BPlusNode {
     @Override
     public LeafNode get(DataBox key) {
         // TODO(proj2): implement
+        int num = 0;
+        while (num < keys.size() && keys.get(num).compareTo(key) < 0) {
+            num++;
+        }
 
-        return null;
+        BPlusNode childNode = getChild(num);
+        return childNode.get(key);
+
     }
 
     // See BPlusNode.getLeftmostLeaf.
@@ -90,16 +97,61 @@ class InnerNode extends BPlusNode {
     public LeafNode getLeftmostLeaf() {
         assert(children.size() > 0);
         // TODO(proj2): implement
-
-        return null;
+        return getChild(0).getLeftmostLeaf();
     }
 
     // See BPlusNode.put.
     @Override
     public Optional<Pair<DataBox, Long>> put(DataBox key, RecordId rid) {
         // TODO(proj2): implement
+        sync();
 
-        return Optional.empty();
+        int num = 0;
+        while (num < keys.size() && keys.get(num).compareTo(key) < 0) {
+            num++;
+        }
+
+        BPlusNode childNode = getChild(num);
+        Optional<Pair<DataBox, Long>> childResult = childNode.put(key, rid);
+        if (childResult.equals(Optional.empty())) {
+            return Optional.empty();
+        } else{
+            DataBox newKey = childResult.get().getFirst();
+            Long newPointer = childResult.get().getSecond();
+
+            int newNum = 0;
+            while (newNum < keys.size() && keys.get(newNum).compareTo(newKey) < 0) {
+                newNum++;
+            }
+
+            keys.add(newNum, newKey);
+            children.add(newNum+1, newPointer);
+
+            if (keys.size() <= metadata.getOrder()) {
+                return Optional.empty();
+            }
+
+            int mid = metadata.getOrder();
+            DataBox splitKey = keys.get(mid);
+
+            List<DataBox> leftKeys = new ArrayList<>(keys.subList(0, mid-1));
+            List<Long> leftChildren = new ArrayList<>(children.subList(0, mid));
+
+            List<DataBox> rightKeys = new ArrayList<>(keys.subList(mid+1, keys.size()));
+            List<Long> rightChildren = new ArrayList<>(children.subList(mid+1, children.size()));
+
+            keys = leftKeys;
+            children = leftChildren;
+
+            InnerNode newInnerNode = new InnerNode(metadata, bufferManager, rightKeys,
+                    rightChildren, treeContext);
+            sync();
+            newInnerNode.sync();
+
+            return Optional.of(new Pair<>(splitKey, newInnerNode.getPage().getPageNum()));
+        }
+
+
     }
 
     // See BPlusNode.bulkLoad.
