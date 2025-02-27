@@ -83,7 +83,7 @@ class InnerNode extends BPlusNode {
     public LeafNode get(DataBox key) {
         // TODO(proj2): implement
         int num = 0;
-        while (num < keys.size() && keys.get(num).compareTo(key) < 0) {
+        while (num < keys.size() && keys.get(num).compareTo(key) <= 0) {
             num++;
         }
 
@@ -104,10 +104,8 @@ class InnerNode extends BPlusNode {
     @Override
     public Optional<Pair<DataBox, Long>> put(DataBox key, RecordId rid) {
         // TODO(proj2): implement
-        sync();
-
         int num = 0;
-        while (num < keys.size() && keys.get(num).compareTo(key) < 0) {
+        while (num < keys.size() && keys.get(num).compareTo(key) <= 0) {
             num++;
         }
 
@@ -127,15 +125,16 @@ class InnerNode extends BPlusNode {
             keys.add(newNum, newKey);
             children.add(newNum+1, newPointer);
 
-            if (keys.size() <= metadata.getOrder()) {
+            if (keys.size() <= metadata.getOrder() * 2) {
+                sync();
                 return Optional.empty();
             }
 
             int mid = metadata.getOrder();
             DataBox splitKey = keys.get(mid);
 
-            List<DataBox> leftKeys = new ArrayList<>(keys.subList(0, mid-1));
-            List<Long> leftChildren = new ArrayList<>(children.subList(0, mid));
+            List<DataBox> leftKeys = new ArrayList<>(keys.subList(0, mid));
+            List<Long> leftChildren = new ArrayList<>(children.subList(0, mid+1));
 
             List<DataBox> rightKeys = new ArrayList<>(keys.subList(mid+1, keys.size()));
             List<Long> rightChildren = new ArrayList<>(children.subList(mid+1, children.size()));
@@ -159,16 +158,55 @@ class InnerNode extends BPlusNode {
     public Optional<Pair<DataBox, Long>> bulkLoad(Iterator<Pair<DataBox, RecordId>> data,
             float fillFactor) {
         // TODO(proj2): implement
+        while (keys.size() <= metadata.getOrder() * 2) {
+            int num = keys.size();
+            BPlusNode childNode = getChild(num);
+            Optional<Pair<DataBox, Long>> childResult = childNode.bulkLoad(data, fillFactor);
+            if (childResult.equals(Optional.empty())) {
+                return Optional.empty();
+            } else {
+                DataBox newKey = childResult.get().getFirst();
+                Long newPointer = childResult.get().getSecond();
 
-        return Optional.empty();
+                keys.add(newKey);
+                children.add(newPointer);
+                sync();
+            }
+
+        }
+
+        int mid = metadata.getOrder();
+        DataBox splitKey = keys.get(mid);
+
+        List<DataBox> leftKeys = new ArrayList<>(keys.subList(0, mid));
+        List<Long> leftChildren = new ArrayList<>(children.subList(0, mid + 1));
+
+        List<DataBox> rightKeys = new ArrayList<>(keys.subList(mid + 1, keys.size()));
+        List<Long> rightChildren = new ArrayList<>(children.subList(mid + 1, children.size()));
+
+        keys = leftKeys;
+        children = leftChildren;
+
+        InnerNode newInnerNode = new InnerNode(metadata, bufferManager, rightKeys,
+                rightChildren, treeContext);
+        sync();
+        newInnerNode.sync();
+
+        return Optional.of(new Pair<>(splitKey, newInnerNode.getPage().getPageNum()));
+
     }
 
     // See BPlusNode.remove.
     @Override
     public void remove(DataBox key) {
         // TODO(proj2): implement
+        int num = 0;
+        while (num < keys.size() && keys.get(num).compareTo(key) <= 0) {
+            num++;
+        }
+        BPlusNode childNode = getChild(num);
+        childNode.remove(key);
 
-        return;
     }
 
     // Helpers /////////////////////////////////////////////////////////////////
