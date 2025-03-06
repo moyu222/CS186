@@ -5,6 +5,7 @@ import edu.berkeley.cs186.database.common.iterator.BacktrackingIterator;
 import edu.berkeley.cs186.database.query.JoinOperator;
 import edu.berkeley.cs186.database.query.QueryOperator;
 import edu.berkeley.cs186.database.table.Record;
+import edu.berkeley.cs186.database.table.Schema;
 
 import java.util.Iterator;
 import java.util.NoSuchElementException;
@@ -88,6 +89,14 @@ public class BNLJOperator extends JoinOperator {
          */
         private void fetchNextLeftBlock() {
             // TODO(proj3_part1): implement
+            // numBuffers, make change on leftBlockIterator
+            // getBI(leftSI, Schema, numB - 2)
+            Schema leftSchema = getLeftSource().getSchema();
+            if (leftSourceIterator.hasNext()){
+                leftBlockIterator = getBlockIterator(leftSourceIterator, leftSchema, numBuffers-2);
+                leftBlockIterator.markNext();
+                leftRecord = leftBlockIterator.next();
+            }
         }
 
         /**
@@ -103,6 +112,12 @@ public class BNLJOperator extends JoinOperator {
          */
         private void fetchNextRightPage() {
             // TODO(proj3_part1): implement
+            Schema rightSchema = getRightSource().getSchema();
+            if (rightSourceIterator.hasNext()) {
+                rightPageIterator = getBlockIterator(rightSourceIterator, rightSchema, 1);
+                rightPageIterator.markNext();
+            }
+
         }
 
         /**
@@ -115,7 +130,38 @@ public class BNLJOperator extends JoinOperator {
          */
         private Record fetchNextRecord() {
             // TODO(proj3_part1): implement
-            return null;
+            if (leftRecord == null) {
+                // The left source was empty, nothing to fetch
+                return null;
+            }
+            while(true) {
+                if (rightPageIterator.hasNext()) {
+                    // the normal case, both call next to compare
+                    // we can not consider leftSide. Since if right exists, left side exists
+                    Record rightRecord = rightPageIterator.next();
+                    if (compare(leftRecord, rightRecord) == 0) {
+                        return leftRecord.concat(rightRecord);
+                    }
+                } else if (leftBlockIterator.hasNext()) {
+                    // reset the rightPI and advance left
+                    this.leftRecord = leftBlockIterator.next();
+                    this.rightPageIterator.reset();
+                } else if(rightSourceIterator.hasNext()) {
+                    // reset left and get new page iterator for right
+                    fetchNextRightPage();
+                    this.leftBlockIterator.reset();
+                    this.leftRecord = leftBlockIterator.next();
+                } else if (leftSourceIterator.hasNext()) {
+                    // get new block iterator for left and reset right
+                    fetchNextLeftBlock();
+                    this.rightSourceIterator.reset();
+                    fetchNextRightPage();
+                } else {
+                    return null;
+                }
+
+            }
+
         }
 
         /**
