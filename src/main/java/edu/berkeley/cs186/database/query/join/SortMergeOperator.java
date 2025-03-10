@@ -144,7 +144,7 @@ public class SortMergeOperator extends JoinOperator {
                 return null;
             }
 
-            while(true) {
+            while(leftRecord != null && rightRecord != null) {
                 if (!this.marked) {
                     while (compare(leftRecord, rightRecord) < 0) {
                         if (leftIterator.hasNext()) leftRecord = leftIterator.next();
@@ -171,7 +171,7 @@ public class SortMergeOperator extends JoinOperator {
                     } else{
                         // since right side may have same value, so we should reset it
                         if (leftIterator.hasNext()) {
-                            this.marked = false;
+//                            this.marked = false;
                             rightIterator.reset();
                             rightRecord = rightIterator.next();
                             leftRecord = leftIterator.next();
@@ -194,6 +194,7 @@ public class SortMergeOperator extends JoinOperator {
                     }
                 }
             }
+            return null;
         }
 
         @Override
