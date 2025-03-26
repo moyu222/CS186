@@ -593,7 +593,6 @@ public class QueryPlan {
         }
         // Apply selection on eligible columns
         minOp = addEligibleSelections(minOp, minCostSelectIndex);
-        // TODO(proj3_part2): implement
         return minOp;
     }
 
