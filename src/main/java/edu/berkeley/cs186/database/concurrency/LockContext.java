@@ -85,6 +85,19 @@ public class LockContext {
         return name;
     }
 
+    // helper method to check if acquire is valid, special case: NL as parent
+    private LockType acquireEffectiveLockType(TransactionContext transaction) {
+        if (transaction == null) return LockType.NL;
+        LockType lockType = LockType.NL;
+        LockContext ctx = this;
+        do {
+            lockType = lockman.getLockType(transaction, ctx.name);
+            ctx = ctx.parent;
+        } while (ctx != null && lockType == LockType.NL);
+        return lockType;
+    }
+
+
     /**
      * Acquire a `lockType` lock, for transaction `transaction`.
      *
