@@ -2,7 +2,7 @@ package edu.berkeley.cs186.database.concurrency;
 
 import edu.berkeley.cs186.database.DatabaseException;
 import edu.berkeley.cs186.database.TransactionContext;
-import sun.jvm.hotspot.utilities.UnsupportedPlatformException;
+//import sun.jvm.hotspot.utilities.UnsupportedPlatformException;
 
 import java.sql.Array;
 import java.util.ArrayList;
@@ -99,14 +99,14 @@ public class LockContext {
     public void acquire(TransactionContext transaction, LockType lockType)
             throws InvalidLockException, DuplicateLockRequestException {
         // TODO(proj4_part2): implement
-        // check if the lockType is duplicate
-        LockType heldType = getExplicitLockType(transaction);
+        LockType heldType = lockman.getLockType(transaction,name);
+        // duplicateLockRequestException does not work ?
         if (heldType == lockType) {
-            throw new DuplicateLockRequestException("The lockType is already held by this xact");
+            throw new InvalidLockException("duplicate.");
         }
-        // check if the context is readonly
         if (readonly) {
-            throw new UnsupportedPlatformException("This lockContext is readonly.");
+            return;
+            //throw new UnsupportedPlatformException("This lockContext is readonly.");
         }
         // check if the request is invalid
         boolean valid = true;
@@ -123,8 +123,11 @@ public class LockContext {
         if (!valid) {
             throw new InvalidLockException("The request does not meet multigranularity constraints.");
         }
+
         lockman.acquire(transaction, name, lockType);
-        this.updateNumChildLocks(transaction, 1);
+        if (parentContext() != null) {
+            parentContext().updateNumChildLocks(transaction, 1);
+        }
 
     }
 
@@ -149,29 +152,18 @@ public class LockContext {
         }
         // check if the context is readonly
         if (readonly) {
-            throw new UnsupportedPlatformException("This lockContext is readonly.");
+            return;
+            //throw new UnsupportedPlatformException("This lockContext is readonly.");
         }
-        // check if request is valid
-//        boolean valid = true;
-//        List<LockContext> descendants = computeDescendants(transaction);
-//        List<LockType> descendantTypes = new ArrayList<>();
-//        for (LockContext descendant : descendants) {
-//            descendantTypes.add(lockman.getLockType(transaction,descendant.name));
-//        }
-//        if (descendantTypes.contains(LockType.S) || descendantTypes.contains(LockType.X)) {
-//            valid = false;
-//        } else if (descendantTypes.contains(LockType.IS) && descendantTypes.contains(LockType.IX)) {
-//            valid = false;
-//        }
-//        if (!valid) {
-//            throw new InvalidLockException("The request does not meet multigranularity constraints.");
-//        }
+
         // releasing locks in bottom-up order
         if (getNumChildren(transaction) > 0) {
             throw new InvalidLockException("Request invalid: releasing locks on children first");
         }
         lockman.release(transaction, name);
-        this.updateNumChildLocks(transaction, -1);
+        if (parentContext() != null) {
+            parentContext().updateNumChildLocks(transaction, -1);
+        }
     }
 
     /**
@@ -198,7 +190,8 @@ public class LockContext {
         // TODO(proj4_part2): implement
         // check if the context is readonly
         if (readonly) {
-            throw new UnsupportedPlatformException("This lockContext is readonly.");
+            return;
+            //throw new UnsupportedPlatformException("This lockContext is readonly.");
         }
         // check duplicate lock
         LockType heldType = lockman.getLockType(transaction, name);
@@ -285,11 +278,12 @@ public class LockContext {
         for (LockContext descendant : descendants) {
             releaseNames.add(descendant.name);
         }
+        updateNumChildLocks(transaction, -1, releaseNames);
+
         releaseNames.add(name);
         if (heldType == LockType.IX || heldType == LockType.SIX) {
             changeToType = LockType.X;
         }
-        updateNumChildLocks(transaction, -1, releaseNames);
         // only make *one* mutating call to the lock manager
         lockman.acquireAndRelease(transaction, name, changeToType, releaseNames);
     }
@@ -384,7 +378,8 @@ public class LockContext {
         List<Lock> heldLocks = lockman.getLocks(transaction);
         List<LockContext> childContext = new ArrayList<>();
         for (Lock lock : heldLocks) {
-            if (name.isDescendantOf(lock.name)) {
+            // pay attention lock.name is the descendant of name
+            if (lock.name.isDescendantOf(name)) {
                 childContext.add(fromResourceName(lockman,lock.name));
             }
         }

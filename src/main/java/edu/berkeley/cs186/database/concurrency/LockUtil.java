@@ -2,6 +2,8 @@ package edu.berkeley.cs186.database.concurrency;
 
 import edu.berkeley.cs186.database.TransactionContext;
 
+import java.util.Map;
+
 /**
  * LockUtil is a declarative layer which simplifies multigranularity lock
  * acquisition for the user (you, in the last task of Part 2). Generally
@@ -42,8 +44,47 @@ public class LockUtil {
         LockType explicitLockType = lockContext.getExplicitLockType(transaction);
 
         // TODO(proj4_part2): implement
+        if (LockType.substitutable(explicitLockType, requestType)) {
+            return;
+        }
+        // update ancestor lock
+        if (parentContext != null) {
+            LockType parentLock = LockType.parentLock(requestType);
+            ensureAncestorLock(parentContext, parentLock, transaction);
+        }
+        if (explicitLockType == LockType.IX && requestType == LockType.S) {
+            lockContext.promote(transaction, LockType.SIX);
+            return;
+        }
+
+        if (explicitLockType.isIntent()) {
+            lockContext.escalate(transaction);
+            return;
+        }
+        if (explicitLockType == LockType.NL) {
+            lockContext.acquire(transaction, requestType);
+        } else {
+            lockContext.promote(transaction, requestType);
+        }
         return;
     }
 
     // TODO(proj4_part2) add any helper methods you want
+    // update the ancestor lock type until root or can be substituted
+    private static void ensureAncestorLock(LockContext parent, LockType requestType, TransactionContext transaction) {
+        if (parent == null || requestType == null) return;
+        LockType effectiveLockType = parent.getEffectiveLockType(transaction);
+        LockType explicitLockType = parent.getExplicitLockType(transaction);
+        if (LockType.substitutable(explicitLockType, requestType) || LockType.substitutable(effectiveLockType, requestType))
+            return;
+        LockContext grandContext = parent.parentContext();
+        LockType grandLock = LockType.parentLock(requestType);
+        ensureAncestorLock(grandContext, grandLock, transaction);
+        if (explicitLockType == LockType.NL) {
+            parent.acquire(transaction, requestType);
+        } else {
+            parent.promote(transaction, requestType);
+        }
+    }
+
 }
